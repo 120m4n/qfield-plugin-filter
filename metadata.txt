@@ -1,7 +1,7 @@
 [general]
 name=Feature Filter
 description=Filter map features by field value — pick a layer, a field, and one or more values to instantly hide non-matching features. Long-press the toolbar icon to clear the filter.
-author=OPENGIS.ch
+author=120m4n
 icon=icon.svg
 version=1.0
 homepage=https://www.opengis.ch/

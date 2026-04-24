@@ -56,7 +56,6 @@ Item {
     layerList = []
     layerModel.clear()
 
-    // mapCanvas.mapSettings.layers is a JS array of QgsMapLayer
     var layers = mapCanvas.mapSettings.layers
     for (var i = 0; i < layers.length; i++) {
       var lyr = layers[i]
@@ -66,22 +65,23 @@ Item {
       }
     }
 
-    // restore previously selected layer
-    var restoreIdx = -1
+    if (layerList.length === 0) return
+
+    var idx = 0
     if (prevId !== "") {
       for (var j = 0; j < layerList.length; j++) {
-        if (layerList[j].id === prevId) { restoreIdx = j; break }
+        if (layerList[j].id === prevId) { idx = j; break }
       }
     }
-    layerCombo.currentIndex = restoreIdx >= 0 ? restoreIdx
-      : (layerList.length > 0 ? 0 : -1)
+    layerCombo.currentIndex = idx
+    // Qt.callLater defers until after the model binding has settled,
+    // since onActivated won't fire for programmatic index changes.
+    Qt.callLater(function() { selectLayer(layerCombo.currentIndex) })
   }
 
   function selectLayer(idx) {
     if (idx < 0 || idx >= layerList.length) return
-    var lyr = layerList[idx]
-    if (currentLayer && currentLayer.id === lyr.id) return
-    currentLayer = lyr
+    currentLayer = layerList[idx]
     currentFieldIndex = -1
     currentFieldName = ""
     selectedValues = []
@@ -90,9 +90,11 @@ Item {
     valueModel.clear()
 
     var fields = currentLayer.fields()
-    for (var i = 0; i < fields.count(); i++) {
+    // fields.count is a Q_PROPERTY on QgsFields (Q_GADGET) — do NOT call as fields.count()
+    var n = fields.count
+    for (var i = 0; i < n; i++) {
       var f = fields.at(i)
-      // QVariant::String = 10, QMetaType::QString = 2014
+      // f.type and f.name are Q_PROPERTY values; QVariant::String=10, QMetaType::QString=2014
       var isText = (f.type === 10 || f.type === 2014)
       fieldList.push({ name: f.name, index: i, isText: isText })
       fieldModel.append({ name: f.name })
@@ -103,18 +105,20 @@ Item {
   function selectField(idx) {
     if (idx < 0 || idx >= fieldList.length) return
     var fi = fieldList[idx]
-    if (currentFieldIndex === fi.index) return
     currentFieldIndex = fi.index
     currentFieldName = fi.name
     currentFieldIsText = fi.isText
     selectedValues = []
     valueModel.clear()
 
-    var vals = currentLayer.uniqueValues(currentFieldIndex)
+    // uniqueValues() is Q_INVOKABLE and returns a QVariantList mapped to a JS array
+    var vals = currentLayer.uniqueValues(currentFieldIndex) || []
     var arr = []
     for (var k = 0; k < vals.length; k++) {
       var v = vals[k]
-      if (v !== null && v !== undefined && String(v) !== "") arr.push(String(v))
+      if (v !== null && v !== undefined && String(v) !== "" && String(v) !== "NULL") {
+        arr.push(String(v))
+      }
     }
     arr.sort(function(a, b) {
       return a.localeCompare(b, undefined, { sensitivity: 'base' })
@@ -223,7 +227,8 @@ Item {
           Layout.fillWidth: true
           model: layerModel
           textRole: "name"
-          onCurrentIndexChanged: selectLayer(currentIndex)
+          // onActivated fires only on explicit user interaction, not on programmatic changes
+          onActivated: selectLayer(index)
         }
 
         // field picker
@@ -233,7 +238,7 @@ Item {
           Layout.fillWidth: true
           model: fieldModel
           textRole: "name"
-          onCurrentIndexChanged: selectField(currentIndex)
+          onActivated: selectField(index)
         }
 
         // filter enabled toggle
